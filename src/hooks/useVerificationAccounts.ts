@@ -4,25 +4,30 @@ import { supabase } from '@/integrations/supabase/client';
 import { Database } from '@/integrations/supabase/types';
 import { toast } from 'sonner';
 
-export type VerificationAccount = Database['public']['Tables']['verification_accounts']['Row'];
+// Tipo de dados que corresponde exatamente à estrutura da sua tabela
+export type VerificationAccount = {
+  id: string;
+  created_at: string;
+  name: string;
+  user_id: string;
+  verification_status: 'Verified' | 'Pending' | 'Not Verified';
+  is_deleted: boolean;
+  done_status: 'No' | 'Yes (Ganha)' | 'Yes (Perda)';
+};
 
-/**
- * Hook para buscar todas as contas de verificação.
- */
 export const useVerificationAccounts = () => {
   return useQuery<VerificationAccount[]>({
     queryKey: ['verification_accounts'],
     queryFn: async () => {
+      // O select busca todas as colunas, incluindo a nova 'done_status'
       const { data, error } = await supabase.from('verification_accounts').select('*').order('created_at');
       if (error) throw error;
-      return data;
+      // Usamos 'as any' para contornar possíveis desatualizações do tipo automático do Supabase
+      return data as any; 
     }
   });
 };
 
-/**
- * Hook para adicionar uma nova conta de verificação.
- */
 export const useAddVerificationAccount = () => {
     const queryClient = useQueryClient();
     return useMutation({
@@ -36,17 +41,11 @@ export const useAddVerificationAccount = () => {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['verification_accounts'] });
-            toast.success("Account added successfully!");
-        },
-        onError: (error) => {
-            toast.error(error.message);
+            toast.success("Account added!");
         }
     });
 };
 
-/**
- * Hook para atualizar uma conta de verificação.
- */
 export const useUpdateVerificationAccount = () => {
     const queryClient = useQueryClient();
     return useMutation({
@@ -56,10 +55,7 @@ export const useUpdateVerificationAccount = () => {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['verification_accounts'] });
-            toast.success("Account status updated!");
-        },
-        onError: (error) => {
-            toast.error(error.message);
+            toast.success("Account updated!");
         }
     });
 };

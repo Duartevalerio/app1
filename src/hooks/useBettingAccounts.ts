@@ -1,4 +1,4 @@
-
+// src/hooks/useBettingAccounts.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -104,4 +104,28 @@ export const useCreateBettingOperation = () => {
       toast.error(error.message);
     }
   });
+};
+
+/**
+ * NOVO HOOK: Atualiza uma operação para um estado de "perdida" (lucro zero).
+ */
+export const useUpdateOperationToLost = () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ operationId, accountId, newGainValue }: { operationId: string, accountId: string, newGainValue: number }) => {
+            const { error } = await supabase
+                .from('betting_operations')
+                .update({ gain_value: newGainValue })
+                .eq('id', operationId);
+
+            if (error) throw error;
+        },
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({ queryKey: ['betting-operations', variables.accountId] });
+            toast.success('Operation updated to a 0€ profit/loss.');
+        },
+        onError: (error: any) => {
+            toast.error(error.message);
+        }
+    });
 };

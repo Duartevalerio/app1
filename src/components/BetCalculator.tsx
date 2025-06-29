@@ -1,4 +1,4 @@
-
+// src/components/BetCalculator.tsx
 import React, { useState } from 'react';
 import { useBettingAccounts, useBettingOperations } from '@/hooks/useBettingAccounts';
 import { AccountSelector } from './AccountSelector';
@@ -34,7 +34,10 @@ const BetCalculator = () => {
 
       {selectedAccount && (
         <>
-          <OperationForm selectedAccount={selectedAccount} />
+          <OperationForm 
+            selectedAccount={selectedAccount}
+          />
+
           <OperationsTable 
             selectedAccount={selectedAccount}
             operations={operations}

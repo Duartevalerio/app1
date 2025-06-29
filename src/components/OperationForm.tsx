@@ -40,7 +40,6 @@ export const OperationForm = ({ selectedAccount }: OperationFormProps) => {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleAddOperation} className="space-y-4">
-          {/* CORREÇÃO: A grelha agora é de 1 coluna em mobile e 2 em ecrãs maiores */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="orbit">Orbit Value (€)</Label>
