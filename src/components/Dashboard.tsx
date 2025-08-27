@@ -1,148 +1,299 @@
 // src/components/Dashboard.tsx
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { useFinancialRecords, useFinancialSummary } from '@/hooks/useFinancialData';
-import { useVerificationAccounts } from '@/hooks/useVerificationAccounts';
-import { Skeleton } from './ui/skeleton';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from 'recharts';
+import { ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { useMonthlyFinancials, useFinancialRecords } from '@/hooks/useFinancialData';
+import MonthPicker from '@/components/MonthPicker';
 
-// --- COMPONENTE: GRÁFICO DE BARRAS DIÁRIO ---
-const DailyBarChart = ({ data }) => {
-    return (
-        <ResponsiveContainer width="100%" height={350}>
-            <BarChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="day" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `€${value}`} />
-                <Tooltip cursor={{ fill: 'rgba(241, 245, 249, 0.5)' }} />
-                <Legend iconType="circle" />
-                <Bar dataKey="profit" name="Profit" fill="#22c55e" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="withdrawal" name="Withdrawn" fill="#ef4444" radius={[4, 4, 0, 0]} />
-            </BarChart>
-        </ResponsiveContainer>
-    );
+// --- CORES (pedido do utilizador) ---
+const GREEN = '#22c55e';
+const RED = '#ef4444';
+const GRAY_AXIS = '#888888';
+
+// --- Helpers ---
+const moeda = (v: number) =>
+  v.toLocaleString('pt-PT', {
+    style: 'currency',
+    currency: 'EUR',
+    maximumFractionDigits: 2,
+  });
+
+// --- COMPONENTE: GRÁFICO DE BARRAS DIÁRIO (Lucro vs Saídas) ---
+const DailyBarChart = ({
+  data,
+}: {
+  data: Array<{ day: string; profit: number; withdrawal: number }>;
+}) => {
+  return (
+    <ResponsiveContainer width="100%" height={350}>
+      <BarChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+        <XAxis dataKey="day" stroke={GRAY_AXIS} fontSize={12} tickLine={false} axisLine={false} />
+        <YAxis
+          stroke={GRAY_AXIS}
+          fontSize={12}
+          tickLine={false}
+          axisLine={false}
+          tickFormatter={(value) => `€${value}`}
+        />
+        <Tooltip
+          formatter={(value: any) => moeda(Number(value))}
+          labelFormatter={(label) => `Dia ${label}`}
+          cursor={{ fill: 'rgba(241, 245, 249, 0.5)' }}
+        />
+        <Legend iconType="circle" />
+        <Bar dataKey="profit" name="Lucro" fill={GREEN} radius={[4, 4, 0, 0]} />
+        <Bar dataKey="withdrawal" name="Saídas" fill={RED} radius={[4, 4, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
 };
 
-// --- COMPONENTE: GRÁFICO DE PIZZA DE TOTAIS ---
-const TotalsPieChart = ({ data }) => {
-    const COLORS = ['#22c55e', '#ef4444'];
-    return (
-        <ResponsiveContainer width="100%" height={350}>
-            <PieChart>
-                <Pie
-                    data={data}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    outerRadius={110} // CORREÇÃO: Raio ligeiramente reduzido para garantir mais espaço
-                    fill="#8884d8"
-                    dataKey="value"
-                    nameKey="name"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                >
-                    {data.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                </Pie>
-                <Tooltip formatter={(value) => `€${Number(value).toFixed(2)}`} />
-                <Legend iconType="circle" />
-            </PieChart>
-        </ResponsiveContainer>
-    );
+// --- COMPONENTE: GRÁFICO DE PIZZA DE TOTAIS (Mês) ---
+const TotalsPieChart = ({ data }: { data: Array<{ name: string; value: number }> }) => {
+  const COLORS = [GREEN, RED];
+  return (
+    <ResponsiveContainer width="100%" height={350}>
+      <PieChart>
+        <Pie
+          data={data}
+          cx="50%"
+          cy="50%"
+          labelLine={false}
+          outerRadius={110}
+          dataKey="value"
+          nameKey="name"
+          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+        >
+          {data.map((_, index) => (
+            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+          ))}
+        </Pie>
+        <Tooltip formatter={(value: any) => moeda(Number(value))} />
+        <Legend iconType="circle" />
+      </PieChart>
+    </ResponsiveContainer>
+  );
 };
 
 const Dashboard = () => {
-  const { data: records = [], isLoading: financialsLoading } = useFinancialRecords();
-  const { data: verificationAccounts = [], isLoading: verificationsLoading } = useVerificationAccounts();
-  const { data: financialSummary, isLoading: summaryLoading } = useFinancialSummary();
+  // Seleção do mês/ano para visão mensal
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month0, setMonth0] = useState(now.getMonth());
 
-  const stats = useMemo(() => {
-    const totalProfit = records.reduce((sum, record) => sum + (record.profit || 0), 0);
-    const totalWithdrawn = records.reduce((sum, record) => sum + (record.withdrawal || 0), 0);
-    const bankroll = financialSummary?.bankroll || 0;
-    const totalBalance = bankroll + totalProfit - totalWithdrawn;
-    const pendingAccounts = verificationAccounts.filter(acc => acc.verification_status === 'Pending' && !acc.is_deleted).length;
-    return { totalBalance, totalProfit, totalWithdrawn, pendingAccounts };
-  }, [records, verificationAccounts, financialSummary]);
+  const { summary, isLoading } = useMonthlyFinancials(year, month0);
 
-  const dailyChartData = useMemo(() => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const recordsThisMonth = records.filter(r => new Date(r.entry_date).getUTCFullYear() === year && new Date(r.entry_date).getUTCMonth() === month);
-    return Array.from({ length: daysInMonth }, (_, i) => {
-        const day = i + 1;
-        const dayRecord = recordsThisMonth.find(r => new Date(r.entry_date).getUTCDate() === day);
-        return {
-            day: day.toString(),
-            profit: dayRecord?.profit || 0,
-            withdrawal: dayRecord?.withdrawal || 0,
-        };
-    });
-  }, [records]);
+  // Totais globais (todos os registos) — para os 3 cards por baixo dos gráficos
+  const { data: allRecords = [], isLoading: loadingAll } = useFinancialRecords();
 
-  const pieChartData = useMemo(() => [
-    { name: 'Total Profit', value: stats.totalProfit },
-    { name: 'Total Withdrawn', value: stats.totalWithdrawn },
-  ].filter(item => item.value > 0), [stats.totalProfit, stats.totalWithdrawn]);
+  const globalTotals = useMemo(() => {
+    const totalProfitAll = allRecords.reduce((s, r) => s + Number(r.profit ?? 0), 0);
+    const totalWithdrawalAll = allRecords.reduce((s, r) => s + Number(r.withdrawal ?? 0), 0);
+    const netAll = totalProfitAll - totalWithdrawalAll + 550;
+    return { totalProfitAll, totalWithdrawalAll, netAll };
+  }, [allRecords]);
 
-  const isLoading = financialsLoading || verificationsLoading || summaryLoading;
+  const pieChartData = useMemo(
+    () =>
+      summary
+        ? [
+            { name: 'Lucro', value: summary.totalProfit },
+            { name: 'Saídas', value: summary.totalWithdrawal },
+          ].filter((i) => i.value > 0)
+        : [],
+    [summary]
+  );
 
-  if (isLoading) {
+  const statusPositivo = (summary?.net ?? 0) >= 0;
+
+  if (isLoading || !summary || loadingAll) {
     return <DashboardSkeleton />;
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <div className="text-sm text-gray-500">Last updated: {new Date().toLocaleDateString('pt-PT')}</div>
+      {/* Cabeçalho + Seletor de mês/ano */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h1 className="text-3xl font-bold text-gray-900">Dashboard — Visão Mensal</h1>
+        <div className="flex items-center gap-4">
+          <div className="text-sm text-gray-500">
+            Última atualização: {new Date().toLocaleDateString('pt-PT')}
+          </div>
+          <MonthPicker
+            year={year}
+            month0to11={month0}
+            onChange={(y, m0) => {
+              setYear(y);
+              setMonth0(m0);
+            }}
+          />
+        </div>
       </div>
 
+      {/* Cards de resumo do mês */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card><CardHeader><CardTitle className="text-sm font-medium">Total Balance</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-green-600">€{stats.totalBalance.toFixed(2)}</div></CardContent></Card>
-        <Card><CardHeader><CardTitle className="text-sm font-medium">Total Profit</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-green-600">€{stats.totalProfit.toFixed(2)}</div></CardContent></Card>
-        <Card><CardHeader><CardTitle className="text-sm font-medium">Total Withdrawn</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-red-600">€{stats.totalWithdrawn.toFixed(2)}</div></CardContent></Card>
-        <Card><CardHeader><CardTitle className="text-sm font-medium">Pending Accounts</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-yellow-600">{stats.pendingAccounts}</div></CardContent></Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Lucro (mês)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-[color:var(--green-600,#16a34a)]">
+              {moeda(summary.totalProfit)}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Saídas (mês)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-[color:var(--red-600,#dc2626)]">
+              {moeda(summary.totalWithdrawal)}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Saldo (mês)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{moeda(summary.net)}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Estado</CardTitle>
+          </CardHeader>
+          <CardContent className="flex items-center gap-2 text-xl font-semibold">
+            {statusPositivo ? (
+              <>
+                <ArrowUpRight className="h-5 w-5 text-emerald-500" /> Positivo
+              </>
+            ) : (
+              <>
+                <ArrowDownRight className="h-5 w-5 text-red-500" /> Negativo
+              </>
+            )}
+          </CardContent>
+        </Card>
       </div>
-      
-      {/* CORREÇÃO: O layout foi alterado para lg:grid-cols-2 para dividir o espaço igualmente */}
+
+      {/* Gráficos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div>
-          <Card>
-            <CardHeader><CardTitle>Daily Performance (Current Month)</CardTitle></CardHeader>
-            <CardContent><DailyBarChart data={dailyChartData} /></CardContent>
-          </Card>
-        </div>
-        <div>
-            <Card>
-                <CardHeader><CardTitle>Profit vs. Withdrawn</CardTitle></CardHeader>
-                <CardContent><TotalsPieChart data={pieChartData} /></CardContent>
-            </Card>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Lucro vs Saídas — por dia</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <DailyBarChart
+              data={summary.daily.map((d) => ({
+                day: d.day,
+                profit: d.profit,
+                withdrawal: d.withdrawal,
+              }))}
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Distribuição no mês</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TotalsPieChart data={pieChartData} />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* --- NOVO BLOCO: Totais Globais (todos os registos) --- */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Ganhos Totais</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold" style={{ color: GREEN }}>
+              {moeda(globalTotals.totalProfitAll)}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Gastos Totais</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold" style={{ color: RED }}>
+              {moeda(globalTotals.totalWithdrawalAll)}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Diferença Total</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div
+              className="text-2xl font-bold"
+              style={{ color: globalTotals.netAll >= 0 ? GREEN : RED }}
+            >
+              {moeda(globalTotals.netAll)}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
 };
 
 const DashboardSkeleton = () => (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <Skeleton className="h-9 w-48 rounded-md" />
+  <div className="space-y-6">
+    <div className="flex items-center justify-between">
+      <Skeleton className="h-9 w-72 rounded-md" />
+      <div className="flex items-center gap-3">
         <Skeleton className="h-5 w-28 rounded-md" />
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Skeleton className="h-24 rounded-lg" />
-        <Skeleton className="h-24 rounded-lg" />
-        <Skeleton className="h-24 rounded-lg" />
-        <Skeleton className="h-24 rounded-lg" />
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div><Skeleton className="h-[422px] rounded-lg" /></div>
-        <div><Skeleton className="h-[422px] rounded-lg" /></div>
+        <Skeleton className="h-9 w-80 rounded-md" />
       </div>
     </div>
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <Skeleton className="h-24 rounded-lg" />
+      <Skeleton className="h-24 rounded-lg" />
+      <Skeleton className="h-24 rounded-lg" />
+      <Skeleton className="h-24 rounded-lg" />
+    </div>
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div>
+        <Skeleton className="h-[422px] rounded-lg" />
+      </div>
+      <div>
+        <Skeleton className="h-[422px] rounded-lg" />
+      </div>
+    </div>
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <Skeleton className="h-24 rounded-lg" />
+      <Skeleton className="h-24 rounded-lg" />
+      <Skeleton className="h-24 rounded-lg" />
+    </div>
+  </div>
 );
 
 export default Dashboard;
