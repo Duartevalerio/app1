@@ -104,7 +104,7 @@ const Dashboard = () => {
   const globalTotals = useMemo(() => {
     const totalProfitAll = allRecords.reduce((s, r) => s + Number(r.profit ?? 0), 0);
     const totalWithdrawalAll = allRecords.reduce((s, r) => s + Number(r.withdrawal ?? 0), 0);
-    const netAll = totalProfitAll - totalWithdrawalAll + 550;
+    const netAll = totalProfitAll - totalWithdrawalAll + 650;
     return { totalProfitAll, totalWithdrawalAll, netAll };
   }, [allRecords]);
 
